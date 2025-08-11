@@ -1,6 +1,4 @@
-
 'use server';
-
 import { z } from 'zod';
 import axios from 'axios';
 import { getOrders, getOrdersByUserId, updateOrderStatus, addOrder, getOrderById } from './order-store';
@@ -47,13 +45,16 @@ async function fetchPhonePeAccessToken(): Promise<{ success: boolean; accessToke
     const clientId = isProd ? process.env.PHONEPE_PROD_CLIENT_ID : process.env.PHONEPE_SANDBOX_CLIENT_ID;
     const clientSecret = isProd ? process.env.PHONEPE_PROD_CLIENT_SECRET : process.env.PHONEPE_SANDBOX_CLIENT_SECRET;
     const clientVersion = isProd ? process.env.PHONEPE_PROD_CLIENT_VERSION : process.env.PHONEPE_SANDBOX_CLIENT_VERSION;
-    const tokenUrl = isProd 
+    const tokenUrl = isProd
       ? 'https://api.phonepe.com/apis/identity-manager/v1/oauth/token'
       : 'https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token';
 
     if (!clientId || !clientSecret || !clientVersion) {
       throw new Error('PhonePe client credentials are not configured.');
     }
+    await addLog('info', clientId,)
+    await addLog('info', clientSecret,)
+    await addLog('info', clientVersion,)
 
     await addLog('info', 'Fetching PhonePe access token', { environment: isProd ? 'production' : 'sandbox' });
 
@@ -158,7 +159,7 @@ async function initiatePhonePePayment(order: Order) {
     const merchantTransactionId = `MTID-${uuidv4().slice(0, 8)}-${order.id}`;
     const isProd = process.env.NEXT_PUBLIC_IS_PRODUCTION === 'true';
     const merchantId = isProd ? process.env.PHONEPE_PROD_MERCHANT_ID : process.env.PHONEPE_SANDBOX_MERCHANT_ID;
-    const phonepeApiUrl = isProd 
+    const phonepeApiUrl = isProd
       ? 'https://api.phonepe.com/apis/pg/checkout/v2/pay'
       : 'https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay';
 
@@ -218,13 +219,13 @@ async function initiatePhonePePayment(order: Order) {
   }
 }
 
-export async function checkPhonePeStatus(merchantTransactionId: string) {
+async function checkPhonePeStatus(merchantTransactionId: string) {
   try {
     const isProd = process.env.NEXT_PUBLIC_IS_PRODUCTION === 'true';
     const merchantId = isProd ? process.env.PHONEPE_PROD_MERCHANT_ID : process.env.PHONEPE_SANDBOX_MERCHANT_ID;
     const saltKey = isProd ? process.env.PHONEPE_PROD_SALT_KEY : process.env.PHONEPE_SANDBOX_SALT_KEY;
     const saltIndex = parseInt(isProd ? process.env.PHONEPE_PROD_SALT_INDEX || '1' : process.env.PHONEPE_SANDBOX_SALT_INDEX || '1');
-    const statusApiUrl = isProd 
+    const statusApiUrl = isProd
       ? `https://api.phonepe.com/apis/pg/v1/status/${merchantId}/${merchantTransactionId}`
       : `https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/status/${merchantId}/${merchantTransactionId}`;
 
@@ -238,6 +239,7 @@ export async function checkPhonePeStatus(merchantTransactionId: string) {
     const xVerify = SHA256(`/pg/v1/status/${merchantId}/${merchantTransactionId}` + saltKey).toString() + '###' + saltIndex;
 
     await addLog('info', `Checking PhonePe status for transaction: ${merchantTransactionId}`);
+
     const response = await axios.get(statusApiUrl, {
       headers: {
         'Content-Type': 'application/json',
@@ -299,7 +301,6 @@ export async function submitReview(data: z.infer<typeof ReviewSchema>) {
     const validatedData = ReviewSchema.parse(data);
     const order = await getOrderById(validatedData.userId, validatedData.orderId);
     if (!order) throw new Error('Order not found.');
-
     const imageUrls = validatedData.images?.length ? await uploadImages(validatedData.images) : [];
     const reviewData = {
       orderId: validatedData.orderId,
@@ -310,7 +311,6 @@ export async function submitReview(data: z.infer<typeof ReviewSchema>) {
       userName: order.name,
       imageUrls,
     };
-
     await addReviewToStore(reviewData);
     await updateOrderStatus(validatedData.userId, validatedData.orderId, 'delivered', true);
     revalidatePath('/');
@@ -325,7 +325,7 @@ export async function submitReview(data: z.infer<typeof ReviewSchema>) {
 }
 
 async function uploadImages(images: string[]): Promise<string[]> {
-  const uploadPromises = images.map(image => 
+  const uploadPromises = images.map(image =>
     cloudinary.uploader.upload(image, { folder: 'reviews', transformation: [{ width: 1000, height: 1000, crop: 'limit' }] })
   );
   const results = await Promise.all(uploadPromises);
